@@ -1,0 +1,224 @@
+/* ===== Cores (tema claro) ===== */
+:root {
+  --fundo: #f4f7fb;
+  --card: #ffffff;
+  --texto: #1c2733;
+  --texto-suave: #536170;
+  --borda: #dde4ec;
+  --destaque: #1d63ed;          /* azul Docker */
+  --destaque-suave: #e6eefe;
+  --codigo-fundo: #0f1b2d;
+  --codigo-texto: #e3ecf7;
+  --hero-inicio: #1d63ed;
+  --hero-fim: #0b3fa8;
+}
+
+/* ===== Cores (tema escuro, automático) ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0d1117;
+    --card: #161d27;
+    --texto: #e6edf3;
+    --texto-suave: #9aa7b4;
+    --borda: #2a3442;
+    --destaque: #6aa1ff;
+    --destaque-suave: #1b2a44;
+    --codigo-fundo: #0a0f16;
+    --codigo-texto: #e3ecf7;
+    --hero-inicio: #123e9c;
+    --hero-fim: #0a2463;
+  }
+}
+
+/* ===== Base ===== */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 1.6;
+  background: var(--fundo);
+  color: var(--texto);
+}
+
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+h1, h2, h3 { line-height: 1.2; }
+h2 { margin-top: 0; font-size: 1.6rem; }
+h3 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+
+a { color: var(--destaque); }
+
+code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--destaque-suave);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+pre {
+  background: var(--codigo-fundo);
+  color: var(--codigo-texto);
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: 0.9em;
+}
+
+/* ===== Topo ===== */
+.hero {
+  background: linear-gradient(135deg, var(--hero-inicio), var(--hero-fim));
+  color: #ffffff;
+  padding: 56px 0 40px;
+}
+
+.hero h1 {
+  font-size: clamp(2.4rem, 7vw, 3.6rem);
+  margin: 8px 0 12px;
+}
+
+.tag {
+  display: inline-block;
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 0.9rem;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  margin: 0 0 24px;
+  opacity: 0.92;
+}
+
+.sumario {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sumario a {
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+}
+
+.sumario a:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* ===== Seções ===== */
+main.container { padding-top: 32px; padding-bottom: 8px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  scroll-margin-top: 16px;
+}
+
+.card ul { padding-left: 1.2rem; }
+
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.compare > div {
+  background: var(--destaque-suave);
+  border-radius: 8px;
+  padding: 8px 16px;
+}
+
+.compare p { margin-top: 0; }
+
+.analogia,
+.dica {
+  border-left: 4px solid var(--destaque);
+  padding-left: 12px;
+  color: var(--texto-suave);
+}
+
+.fluxo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.fluxo span:not(.seta) {
+  background: var(--destaque);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.seta { color: var(--texto-suave); font-weight: 700; }
+
+/* ===== Tabela de comandos ===== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--borda);
+  vertical-align: top;
+}
+
+td code { white-space: nowrap; }
+
+/* ===== Rodapé com a versão do deploy ===== */
+.rodape {
+  border-top: 1px solid var(--borda);
+  padding: 20px 0;
+  text-align: center;
+  color: var(--texto-suave);
+  font-size: 0.95rem;
+}
+
+.versao {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-weight: 700;
+  color: var(--destaque);
+}
+
+/* ===== Celular ===== */
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero { padding: 40px 0 28px; }
+  .card { padding: 18px; }
+  .compare { grid-template-columns: 1fr; }
+
+  /* Tabela vira lista no celular */
+  thead { display: none; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tr { border-bottom: 1px solid var(--borda); padding: 8px 0; }
+  td { border: none; padding: 2px 0; }
+  td code { white-space: normal; word-break: break-word; }
+}

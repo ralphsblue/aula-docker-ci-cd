@@ -1,0 +1,6 @@
+# Para o domínio em DOMAIN (ex.: minhaaula.duckdns.org)...
+{$DOMAIN} {
+	# ...repasse tudo para o container "site" na porta 80.
+	# O HTTPS é automático: o Caddy pede e renova o certificado sozinho.
+	reverse_proxy site:80
+}

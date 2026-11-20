@@ -1,0 +1,11 @@
+# Compose para rodar o site na SUA máquina.
+# Uso:  docker compose up --build
+# Depois abra http://localhost:8080
+
+services:
+  site:
+    # Builda a imagem a partir do Dockerfile desta pasta.
+    build: .
+    ports:
+      # "porta-na-sua-máquina:porta-dentro-do-container"
+      - "8080:80"

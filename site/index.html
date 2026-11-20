@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aula - Docker e CI/CD</title>
+  <meta name="description" content="Material de apoio da aula de Docker e CI/CD.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="hero">
+    <div class="container">
+      <p class="tag">🐳 Aula prática</p>
+
+      <!-- 👋 ALTERE AQUI: mude o texto abaixo, abra um PR e veja o deploy acontecer -->
+      <h1>Olá, turma!</h1>
+
+      <p class="subtitle">Docker e CI/CD: do "na minha máquina funciona" ao deploy automático.</p>
+      <nav class="sumario" aria-label="Sumário">
+        <a href="#problema">O problema</a>
+        <a href="#docker">Docker</a>
+        <a href="#vm-container">VM vs container</a>
+        <a href="#imagem-container">Imagem vs container</a>
+        <a href="#dockerfile">Dockerfile</a>
+        <a href="#compose">Compose</a>
+        <a href="#cicd">CI/CD</a>
+        <a href="#comandos">Comandos</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section id="problema" class="card">
+      <h2>"Na minha máquina funciona" 🤷</h2>
+      <p>
+        O código roda no seu computador, mas quebra no do colega ou no servidor.
+        O motivo quase sempre é o <strong>ambiente</strong>: versão diferente da linguagem,
+        uma biblioteca faltando, outra configuração do sistema operacional.
+      </p>
+      <p>
+        A ideia do Docker é simples: em vez de entregar só o código,
+        a gente entrega <strong>o código junto com o ambiente</strong> em que ele roda.
+      </p>
+    </section>
+
+    <section id="docker" class="card">
+      <h2>O que é Docker?</h2>
+      <p>
+        Docker é uma ferramenta para empacotar uma aplicação e tudo o que ela precisa
+        (sistema base, bibliotecas, configurações) em uma <strong>imagem</strong>,
+        e rodar essa imagem como um <strong>container</strong> isolado.
+      </p>
+      <ul>
+        <li><strong>Docker CLI</strong>: o comando <code>docker</code> que você digita.</li>
+        <li><strong>Docker daemon</strong>: o serviço que de fato cria e roda os containers.</li>
+        <li><strong>Registry</strong>: onde as imagens ficam guardadas (Docker Hub, GHCR).</li>
+      </ul>
+    </section>
+
+    <section id="vm-container" class="card">
+      <h2>VM vs container</h2>
+      <div class="compare">
+        <div>
+          <h3>Máquina virtual</h3>
+          <ul>
+            <li>Emula um computador inteiro, com o próprio kernel.</li>
+            <li>Pesada: ocupa GBs e leva minutos para ligar.</li>
+            <li>Isolamento muito forte.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Container</h3>
+          <ul>
+            <li>Compartilha o kernel do host (namespaces + cgroups).</li>
+            <li>Leve: ocupa MBs e sobe em segundos.</li>
+            <li>Isolamento suficiente para a maioria das aplicações.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="imagem-container" class="card">
+      <h2>Imagem vs container</h2>
+      <p>
+        A <strong>imagem</strong> é a receita congelada: só leitura, feita de camadas.
+        O <strong>container</strong> é a imagem rodando, com uma camada de escrita por cima.
+      </p>
+      <p class="analogia">
+        Imagem está para container assim como <strong>classe</strong> está para <strong>objeto</strong>:
+        de uma imagem você cria quantos containers quiser.
+      </p>
+      <div class="fluxo" aria-label="Ciclo do Docker">
+        <span>Dockerfile</span>
+        <span class="seta" aria-hidden="true">→</span>
+        <span>Imagem</span>
+        <span class="seta" aria-hidden="true">→</span>
+        <span>Registry</span>
+        <span class="seta" aria-hidden="true">→</span>
+        <span>Container</span>
+      </div>
+    </section>
+
+    <section id="dockerfile" class="card">
+      <h2>Dockerfile</h2>
+      <p>
+        É o arquivo de texto com a receita da imagem.
+        Cada instrução gera uma <strong>camada</strong>, e o Docker reaproveita (cache)
+        as camadas que não mudaram.
+      </p>
+<pre><code># imagem base
+FROM nginx:1.30.7-alpine
+
+# copia os arquivos do site para dentro da imagem
+COPY site/ /usr/share/nginx/html/
+
+# porta usada pelo container
+EXPOSE 80</code></pre>
+      <p class="dica">Dica: coloque no fim o que muda com mais frequência, assim o cache aproveita as camadas de cima.</p>
+    </section>
+
+    <section id="compose" class="card">
+      <h2>Docker Compose</h2>
+      <p>
+        Quando a aplicação tem mais de um container (site, banco, proxy...),
+        o Compose descreve tudo em um arquivo <code>docker-compose.yml</code>
+        e sobe o conjunto com um único comando.
+      </p>
+<pre><code>services:
+  site:
+    build: .
+    ports:
+      - "8080:80"</code></pre>
+    </section>
+
+    <section id="cicd" class="card">
+      <h2>CI/CD</h2>
+      <div class="compare">
+        <div>
+          <h3>CI - Integração Contínua</h3>
+          <p>A cada push ou pull request, um robô valida o código, builda a imagem e roda os testes. Quebrou? Você fica sabendo na hora.</p>
+        </div>
+        <div>
+          <h3>CD - Entrega Contínua</h3>
+          <p>Passou no CI? O robô publica a imagem no registry e atualiza o servidor sozinho. Sem SSH manual.</p>
+        </div>
+      </div>
+      <div class="fluxo" aria-label="Fluxo de CI/CD">
+        <span>git push</span>
+        <span class="seta" aria-hidden="true">→</span>
+        <span>CI ✅</span>
+        <span class="seta" aria-hidden="true">→</span>
+        <span>Imagem no GHCR</span>
+        <span class="seta" aria-hidden="true">→</span>
+        <span>Site no ar</span>
+      </div>
+    </section>
+
+    <section id="comandos" class="card">
+      <h2>Comandos úteis</h2>
+      <table>
+        <thead>
+          <tr><th>Comando</th><th>O que faz</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>docker build -t meu-site .</code></td><td>Cria uma imagem a partir do Dockerfile</td></tr>
+          <tr><td><code>docker run -p 8080:80 meu-site</code></td><td>Roda um container da imagem</td></tr>
+          <tr><td><code>docker ps</code></td><td>Lista os containers rodando</td></tr>
+          <tr><td><code>docker images</code></td><td>Lista as imagens locais</td></tr>
+          <tr><td><code>docker logs &lt;container&gt;</code></td><td>Mostra os logs de um container</td></tr>
+          <tr><td><code>docker exec -it &lt;container&gt; sh</code></td><td>Abre um terminal dentro do container</td></tr>
+          <tr><td><code>docker compose up --build</code></td><td>Builda e sobe todos os serviços</td></tr>
+          <tr><td><code>docker compose down</code></td><td>Para e remove os serviços</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <footer class="rodape">
+    <div class="container">
+      <!-- Os valores abaixo são trocados no "docker build" (veja os ARG no Dockerfile) -->
+      <p>
+        Versão do deploy: <span class="versao">__GIT_SHA__</span>
+        · build em <span class="versao">__BUILD_DATE__</span>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>

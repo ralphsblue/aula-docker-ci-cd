@@ -1,0 +1,44 @@
+# Compose para a PRODUÇÃO (a VPS).
+# Diferenças em relação ao docker-compose.yml local:
+#   - a imagem NÃO é buildada aqui: ela vem pronta do registry (GHCR);
+#   - o Caddy fica na frente do site e cuida do HTTPS sozinho.
+#
+# As variáveis IMAGE e DOMAIN vêm do arquivo .env (que o CD cria na VPS):
+#   IMAGE=ghcr.io/usuario/repositorio:latest
+#   DOMAIN=minhaaula.duckdns.org
+#
+# Uso:  docker compose -f docker-compose.prod.yml pull
+#       docker compose -f docker-compose.prod.yml up -d
+
+services:
+  site:
+    # Imagem publicada pelo CD no GHCR.
+    image: ${IMAGE:?defina IMAGE no arquivo .env}
+    # Se o container cair (ou a VPS reiniciar), o Docker sobe de novo.
+    restart: unless-stopped
+    # Sem "ports:": o site só é acessível pela rede interna, através do Caddy.
+
+  caddy:
+    # Proxy reverso com HTTPS automático (certificado gratuito do Let's Encrypt).
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"     # HTTP (o Caddy redireciona para HTTPS)
+      - "443:443"   # HTTPS
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no arquivo .env}
+    volumes:
+      # A configuração do Caddy (3 linhas, veja o arquivo Caddyfile).
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Onde o Caddy guarda os certificados. Sem isso, cada deploy pediria
+      # um certificado novo e esbarraria no limite do Let's Encrypt.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      site:
+        # Só sobe o Caddy depois que o healthcheck do site estiver ok.
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

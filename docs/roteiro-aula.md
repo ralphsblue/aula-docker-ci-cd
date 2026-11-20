@@ -15,7 +15,9 @@ Repositório: https://github.com/ralphsblue/aula-docker-ci-cd
   docker pull caddy:2.11.9-alpine
   npm install -g htmlhint@1.9.2
   ```
-- [ ] Conferir que o pacote no GHCR está **público**: GitHub → seu perfil → Packages → `aula-docker-ci-cd` → Package settings → Change visibility → Public.
+- [ ] Conferir que o pacote no GHCR está **público** (ele herda a visibilidade do repositório, que é público).
+  Teste sem login: `docker logout ghcr.io && docker pull ghcr.io/ralphsblue/aula-docker-ci-cd:latest`.
+  Se falhar: GitHub → seu perfil → Packages → `aula-docker-ci-cd` → Package settings → Change visibility → Public.
 - [ ] Tirar prints (ou gravar a tela) de um run do CI com ❌, um com ✅ e um do CD, para o plano B.
 - [ ] Deixar abertos: o VS Code no repositório, o terminal, a aba Actions do GitHub e o site.
 - [ ] Voltar a `main` para o ponto de partida (o ensaio deixa workflows nela).

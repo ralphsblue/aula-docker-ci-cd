@@ -52,12 +52,12 @@ site/                      o site (index.html + style.css)
 Dockerfile                 receita da imagem (nginx + site)
 .dockerignore              o que fica fora do build
 docker-compose.yml         rodar local (porta 8080)
-docker-compose.prod.yml    produção: imagem do GHCR + Caddy com HTTPS
-Caddyfile                  configuração do Caddy (proxy reverso)
+docker-compose.prod.yml    produção: imagem do GHCR em 127.0.0.1:8180
+deploy/nginx-aula-docker.conf  site do nginx da VPS (proxy + HTTPS)
 scripts/teste-fumaca.sh    teste de fumaça
 .htmlhintrc                regras de validação do HTML
 .github/workflows/ci.yml   CI: valida, builda e testa
-.github/workflows/cd.yml   CD: publica a imagem no GHCR
+.github/workflows/cd.yml   CD: publica no GHCR e atualiza a VPS
 docs/                      preparação da VPS e roteiro da aula
 ```
 

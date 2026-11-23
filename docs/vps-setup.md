@@ -1,66 +1,66 @@
 # Preparando a VPS
 
-> [!IMPORTANT]
-> **Rascunho (fase 2).**
-> Ainda não temos acesso à VPS.
-> O passo 0 decide se usamos o Caddy deste repositório ou o proxy que já existe lá, e o resto deste guia pode mudar com isso.
+A VPS é de um amigo e já roda vários sites dele, então a regra é: **não mexer no que já existe**.
+Tudo da aula é **adicionado** ao lado do que está lá, e no final tem o passo a passo para remover.
 
-A VPS é de um amigo, então a regra é: **não mexer no que já existe**.
-Tudo da aula fica isolado em um usuário `deploy` e na pasta `/home/deploy/aula-docker`.
-No final tem o passo a passo para remover tudo.
+## Como fica
 
-## 0. Diagnóstico: o que já existe na VPS?
-
-```sh
-docker --version
-sudo ss -tlnp | grep -E ':(80|443)\s'
-docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'
+```
+internet → nginx da VPS (80/443, HTTPS via certbot) → 127.0.0.1:8180 → container aula-docker
 ```
 
-| Resultado | O que fazer |
+| O que | Onde |
 |---|---|
-| Nada nas portas 80/443 | Seguir este guia com o Caddy. |
-| Traefik nas portas 80/443 | Trocar o Caddy por labels do Traefik no serviço `site`. Precisa do nome da rede, do entrypoint HTTPS e do certresolver do Traefik. |
-| nginx nas portas 80/443 | Trocar o Caddy por um arquivo de site no nginx com `proxy_pass` e HTTPS via certbot. |
+| Container do site | projeto Compose `aula-docker`, porta `127.0.0.1:8180` |
+| Arquivos do deploy | `/home/deploy/aula-docker/docker-compose.yml` |
+| Site do nginx | `/etc/nginx/sites-available/aula-docker` (+ link em `sites-enabled`) |
+| Certificado | `certbot`, nome `SEU_SUBDOMINIO.duckdns.org` |
+| Usuário do GitHub Actions | `deploy` (grupo `docker`) |
 
-## 1. Docker
+O que **não** muda: as configs do nginx que já existem, firewall, portas abertas, containers e projetos Compose do dono da VPS.
 
-Só se o `docker --version` acima não encontrou nada:
+## 0. Conferências antes de começar
 
-```sh
-curl -fsSL https://get.docker.com | sudo sh
-```
-
-Anote se o Docker foi instalado por nós, para saber se ele deve ser removido no final.
-
-## 2. Usuário `deploy`
+Só leitura, nada é alterado:
 
 ```sh
-sudo adduser --disabled-password --gecos "" deploy
-sudo usermod -aG docker deploy
+ss -tlnH | grep ':8180 ' || echo "8180 livre"
+sudo docker compose ls | grep aula-docker || echo "nome aula-docker livre"
+ls /etc/nginx/sites-available/aula-docker 2>/dev/null || echo "nome do site livre"
+getent passwd deploy || echo "usuário deploy livre"
 ```
 
-> [!WARNING]
-> Quem está no grupo `docker` consegue virar root na máquina (pode montar `/` dentro de um container).
-> A chave SSH do `deploy` vai ficar guardada como secret no GitHub: trate essa chave como uma senha de root e apague tudo depois da aula.
+## 1. DuckDNS
 
-## 3. Chave SSH só para o deploy
+1. Entre em https://www.duckdns.org com uma conta do GitHub ou Google.
+2. Crie um subdomínio e preencha o campo `current ip` com o IP da VPS.
+3. Confira na sua máquina: `nslookup SEU_SUBDOMINIO.duckdns.org` tem que responder o IP da VPS.
+
+## 2. Chave SSH só para o deploy
 
 Na **sua** máquina:
 
 ```sh
 ssh-keygen -t ed25519 -f ~/.ssh/aula-deploy -C "aula-deploy" -N ""
+cat ~/.ssh/aula-deploy.pub
 ```
 
-Na VPS, autorize a chave pública (`~/.ssh/aula-deploy.pub`):
+## 3. Usuário `deploy`
+
+Na VPS, colando a chave pública do passo 2 no lugar de `CHAVE_PUBLICA`:
 
 ```sh
-sudo mkdir -p /home/deploy/.ssh
-echo "COLE_AQUI_O_CONTEUDO_DE_aula-deploy.pub" | sudo tee /home/deploy/.ssh/authorized_keys
-sudo chown -R deploy:deploy /home/deploy/.ssh
-sudo chmod 700 /home/deploy/.ssh
+sudo adduser --disabled-password --gecos "" deploy
+sudo usermod -aG docker deploy
+sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
+echo "CHAVE_PUBLICA" | sudo tee /home/deploy/.ssh/authorized_keys
+sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 sudo chmod 600 /home/deploy/.ssh/authorized_keys
 ```
+
+> [!WARNING]
+> Quem está no grupo `docker` consegue virar root na máquina (pode montar `/` dentro de um container).
+> A chave do `deploy` vai ficar como secret no GitHub: trate essa chave como uma senha de root e apague tudo depois da aula.
 
 Teste da sua máquina:
 
@@ -68,22 +68,32 @@ Teste da sua máquina:
 ssh -i ~/.ssh/aula-deploy deploy@IP_DA_VPS docker ps
 ```
 
-## 4. Portas 80 e 443
+## 4. Site no nginx
 
-Se o firewall `ufw` estiver ativo (`sudo ufw status`):
+Copie o arquivo `deploy/nginx-aula-docker.conf` do repositório para a VPS, trocando o subdomínio:
 
 ```sh
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
+sed 's/SEU_SUBDOMINIO/meusubdominio/' deploy/nginx-aula-docker.conf | ssh vps "sudo tee /etc/nginx/sites-available/aula-docker > /dev/null"
 ```
 
-Se a VPS for de um provedor com firewall no painel (AWS, Oracle, Hetzner...), libere 80 e 443 lá também.
+Na VPS:
 
-## 5. DuckDNS
+```sh
+sudo ln -s /etc/nginx/sites-available/aula-docker /etc/nginx/sites-enabled/aula-docker
+sudo nginx -t && sudo systemctl reload nginx
+```
 
-1. Entre em https://www.duckdns.org com uma conta do GitHub ou Google.
-2. Crie um subdomínio, por exemplo `minhaaula`, e preencha o campo `current ip` com o IP da VPS.
-3. Confira: `nslookup minhaaula.duckdns.org` tem que responder o IP da VPS.
+O `nginx -t` testa **todas** as configs antes.
+Se ele acusar qualquer erro, o `&&` impede o reload e os sites que já estão no ar continuam como estavam.
+O `reload` não derruba conexões: o nginx troca de configuração sem parar.
+
+## 5. HTTPS
+
+```sh
+sudo certbot --nginx --redirect -d SEU_SUBDOMINIO.duckdns.org
+```
+
+O certbot edita só o arquivo `aula-docker` (as linhas `# managed by Certbot`) e renova o certificado sozinho.
 
 ## 6. Secrets no GitHub
 
@@ -93,54 +103,29 @@ Na sua máquina, dentro do repositório:
 gh secret set VPS_HOST --body "IP_DA_VPS"
 gh secret set VPS_USER --body "deploy"
 gh secret set VPS_SSH_KEY < ~/.ssh/aula-deploy
-gh secret set DOMAIN --body "minhaaula.duckdns.org"
+gh secret set DOMAIN --body "SEU_SUBDOMINIO.duckdns.org"
 ```
 
 ## 7. Primeiro deploy manual
 
 ```sh
 ssh -i ~/.ssh/aula-deploy deploy@IP_DA_VPS mkdir -p aula-docker
-scp -i ~/.ssh/aula-deploy docker-compose.prod.yml Caddyfile deploy@IP_DA_VPS:aula-docker/
-ssh -i ~/.ssh/aula-deploy deploy@IP_DA_VPS
+scp -i ~/.ssh/aula-deploy docker-compose.prod.yml deploy@IP_DA_VPS:aula-docker/docker-compose.yml
+ssh -i ~/.ssh/aula-deploy deploy@IP_DA_VPS "cd aula-docker && docker compose pull && docker compose up -d"
 ```
 
-Já dentro da VPS:
-
-```sh
-cd aula-docker
-cat > .env << 'EOF'
-IMAGE=ghcr.io/ralphsblue/aula-docker-ci-cd:latest
-DOMAIN=minhaaula.duckdns.org
-EOF
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml logs -f caddy
-```
-
-Abra `https://minhaaula.duckdns.org` e confira o SHA no rodapé.
+Abra `https://SEU_SUBDOMINIO.duckdns.org` e confira o SHA no rodapé.
 
 ## Removendo tudo depois da aula
 
-Na VPS, como `deploy`:
+Na VPS:
 
 ```sh
-cd ~/aula-docker
-docker compose -f docker-compose.prod.yml down --volumes --rmi all
-```
-
-Na VPS, com o seu usuário de sempre:
-
-```sh
+sudo -u deploy sh -c "cd ~/aula-docker && docker compose down --rmi all"
+sudo rm /etc/nginx/sites-enabled/aula-docker /etc/nginx/sites-available/aula-docker
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot delete --cert-name SEU_SUBDOMINIO.duckdns.org
 sudo deluser --remove-home deploy
-sudo ufw delete allow 80/tcp     # só se você liberou no passo 4
-sudo ufw delete allow 443/tcp    # só se você liberou no passo 4
-```
-
-Se o Docker foi instalado por nós no passo 1, remova também:
-
-```sh
-sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo rm -rf /var/lib/docker /var/lib/containerd
 ```
 
 Fora da VPS:
@@ -148,3 +133,4 @@ Fora da VPS:
 - Apague o subdomínio no DuckDNS.
 - Apague os secrets: `gh secret delete VPS_HOST`, e o mesmo para `VPS_USER`, `VPS_SSH_KEY` e `DOMAIN`.
 - Apague a chave local: `rm ~/.ssh/aula-deploy ~/.ssh/aula-deploy.pub`.
+- Avise o dono da VPS para retirar o sudo do seu usuário.

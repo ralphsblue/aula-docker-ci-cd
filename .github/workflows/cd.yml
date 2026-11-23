@@ -2,10 +2,9 @@
 # CD - Entrega Contínua
 # Quando o CI termina com sucesso na main, este workflow:
 #   1) builda a imagem com a versão (SHA do commit) no rodapé;
-#   2) publica a imagem no GitHub Container Registry (GHCR).
-#
-# Fase 2 (quando tivermos a VPS): um segundo job "deploy" vai
-# fazer SSH na VPS e rodar "docker compose pull && docker compose up -d".
+#   2) publica a imagem no GitHub Container Registry (GHCR);
+#   3) entra na VPS por SSH e atualiza o container;
+#   4) confere se a versão nova está no ar.
 # ------------------------------------------------------------------
 name: CD
 
@@ -70,3 +69,55 @@ jobs:
           docker push "$IMAGEM:latest"
           docker push "$IMAGEM:$SHA_CURTO"
           echo "✅ Publicado: $IMAGEM:$SHA_CURTO" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    # Só roda depois que o job "publicar" terminar com sucesso.
+    needs: publicar
+    runs-on: ubuntu-24.04
+
+    # Dados da VPS, cadastrados em Settings → Secrets and variables → Actions.
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      DOMAIN: ${{ secrets.DOMAIN }}
+
+    steps:
+      # 1) Baixa o código de novo: precisamos do docker-compose.prod.yml.
+      - name: Baixar o código
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # 2) Prepara o SSH: grava a chave privada e confia na VPS (known_hosts).
+      - name: Preparar o SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      # 3) Copia o compose de produção para a VPS (com o nome docker-compose.yml).
+      - name: Copiar o compose para a VPS
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" "mkdir -p aula-docker"
+          scp docker-compose.prod.yml "$VPS_USER@$VPS_HOST:aula-docker/docker-compose.yml"
+
+      # 4) Na VPS: baixa a imagem nova e recria o container.
+      - name: Atualizar o container na VPS
+        run: ssh "$VPS_USER@$VPS_HOST" "cd aula-docker && docker compose pull && docker compose up -d"
+
+      # 5) Confere no site público se o rodapé já mostra o SHA deste commit.
+      - name: Conferir a versão no ar
+        run: |
+          SHA_CURTO=$(git rev-parse --short=7 HEAD)
+          for tentativa in $(seq 1 10); do
+            if curl -fsS "https://$DOMAIN/" | grep -qF "$SHA_CURTO"; then
+              echo "✅ https://$DOMAIN está na versão $SHA_CURTO" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Tentativa $tentativa: a versão nova ainda não apareceu, esperando..."
+            sleep 3
+          done
+          echo "❌ O site não mostrou a versão $SHA_CURTO"
+          exit 1

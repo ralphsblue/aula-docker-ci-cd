@@ -1,44 +1,24 @@
 # Compose para a PRODUÇÃO (a VPS).
 # Diferenças em relação ao docker-compose.yml local:
 #   - a imagem NÃO é buildada aqui: ela vem pronta do registry (GHCR);
-#   - o Caddy fica na frente do site e cuida do HTTPS sozinho.
+#   - a porta só é aberta para a própria VPS (127.0.0.1). Quem recebe o
+#     público é o nginx da VPS, que cuida do HTTPS e repassa para cá.
 #
-# As variáveis IMAGE e DOMAIN vêm do arquivo .env (que o CD cria na VPS):
-#   IMAGE=ghcr.io/usuario/repositorio:latest
-#   DOMAIN=minhaaula.duckdns.org
+#   internet → nginx da VPS (443, HTTPS) → 127.0.0.1:8180 → este container
 #
-# Uso:  docker compose -f docker-compose.prod.yml pull
-#       docker compose -f docker-compose.prod.yml up -d
+# Na VPS este arquivo se chama docker-compose.yml (o CD copia com esse nome).
+# Uso:  docker compose pull
+#       docker compose up -d
+
+# Nome fixo do projeto: evita colidir com outros projetos Compose da VPS.
+name: aula-docker
 
 services:
   site:
-    # Imagem publicada pelo CD no GHCR.
-    image: ${IMAGE:?defina IMAGE no arquivo .env}
+    # Imagem publicada pelo CD no GHCR (fork? troque pelo seu usuário).
+    image: ghcr.io/ralphsblue/aula-docker-ci-cd:latest
     # Se o container cair (ou a VPS reiniciar), o Docker sobe de novo.
     restart: unless-stopped
-    # Sem "ports:": o site só é acessível pela rede interna, através do Caddy.
-
-  caddy:
-    # Proxy reverso com HTTPS automático (certificado gratuito do Let's Encrypt).
-    image: caddy:2.11.9-alpine
-    restart: unless-stopped
     ports:
-      - "80:80"     # HTTP (o Caddy redireciona para HTTPS)
-      - "443:443"   # HTTPS
-    environment:
-      DOMAIN: ${DOMAIN:?defina DOMAIN no arquivo .env}
-    volumes:
-      # A configuração do Caddy (3 linhas, veja o arquivo Caddyfile).
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Onde o Caddy guarda os certificados. Sem isso, cada deploy pediria
-      # um certificado novo e esbarraria no limite do Let's Encrypt.
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      site:
-        # Só sobe o Caddy depois que o healthcheck do site estiver ok.
-        condition: service_healthy
-
-volumes:
-  caddy_data:
-  caddy_config:
+      # Só a própria VPS acessa a porta 8180; de fora, só pelo nginx.
+      - "127.0.0.1:8180:80"

@@ -1,10 +1,9 @@
 # Roteiro da parte prática
 
-> [!NOTE]
-> As etapas 1, 2, 3 e 5 (até a imagem no GHCR) já funcionam.
-> A etapa 4 e o final da etapa 5 (site atualizando na VPS) dependem do acesso à VPS e estão marcados como **fase 2**.
-
 Repositório: https://github.com/ralphsblue/aula-docker-ci-cd
+
+A VPS precisa estar preparada antes (veja [vps-setup.md](vps-setup.md)).
+Nos comandos abaixo, troque `IP_DA_VPS` e `SEU_SUBDOMINIO` pelos valores reais.
 
 ## Antes da aula
 
@@ -12,7 +11,6 @@ Repositório: https://github.com/ralphsblue/aula-docker-ci-cd
 - [ ] Baixar antes as imagens usadas, para não depender da internet da faculdade:
   ```sh
   docker pull nginx:1.30.7-alpine
-  docker pull caddy:2.11.9-alpine
   npm install -g htmlhint@1.9.2
   ```
 - [ ] Conferir que o pacote no GHCR está **público** (ele herda a visibilidade do repositório, que é público).
@@ -128,7 +126,7 @@ Fazer o merge.
 
 Outra forma de quebrar: apagar um `</div>` do `index.html`, e o passo **Validar o HTML** fica ❌.
 
-## Etapa 4: deploy manual (fase 2)
+## Etapa 4: deploy manual
 
 **Objetivo:** a turma sentir a dor de fazer deploy na mão.
 
@@ -148,17 +146,18 @@ docker build \
 # 3. publicar
 docker push ghcr.io/ralphsblue/aula-docker-ci-cd:latest
 
-# 4. copiar os arquivos para a VPS
-scp -i ~/.ssh/aula-deploy docker-compose.prod.yml Caddyfile deploy@IP_DA_VPS:aula-docker/
+# 4. copiar o compose de produção para a VPS
+scp -i ~/.ssh/aula-deploy docker-compose.prod.yml deploy@IP_DA_VPS:aula-docker/docker-compose.yml
 
 # 5. entrar na VPS e atualizar
 ssh -i ~/.ssh/aula-deploy deploy@IP_DA_VPS
 cd aula-docker
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+docker compose pull
+docker compose up -d
+exit
 ```
 
-Abrir o site: o SHA no rodapé mudou.
+Abrir `https://SEU_SUBDOMINIO.duckdns.org`: o SHA no rodapé mudou.
 Perguntar à turma: "e se eu esquecer um passo? e se eu buildar sem rodar os testes? e se forem 10 deploys por dia?"
 
 ## Etapa 5: CD ao vivo
@@ -175,20 +174,17 @@ Perguntar à turma: "e se eu esquecer um passo? e se eu buildar sem rodar os tes
 4. CI ✅ no PR → merge.
 5. Na aba **Actions**: o CI roda na `main` e, quando termina, dispara o **CD** sozinho.
 6. Abrir o pacote no GHCR (GitHub → Packages): aparecem as tags `latest` e o SHA do commit.
-7. **(fase 2)** Abrir o site na VPS: a frase nova está lá e o rodapé mostra o SHA novo.
+7. O job **deploy** entra na VPS, atualiza o container e confere o site: o passo **Conferir a versão no ar** fica ✅.
+8. Abrir `https://SEU_SUBDOMINIO.duckdns.org` (pedir para a turma abrir no celular): a frase nova está lá e o rodapé mostra o SHA novo.
 
-Até a VPS ficar pronta, dá para mostrar o passo 7 rodando a "produção" no próprio notebook:
+Se a VPS estiver fora do ar, dá para mostrar o passo 8 rodando a "produção" no próprio notebook:
 
 ```sh
-cat > .env << 'EOF'
-IMAGE=ghcr.io/ralphsblue/aula-docker-ci-cd:latest
-DOMAIN=localhost
-EOF
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Abrir https://localhost (o navegador avisa que o certificado é local; pode aceitar).
+Abrir http://localhost:8180.
 Para encerrar: `docker compose -f docker-compose.prod.yml down`.
 
 ## CD em blocos para colar
@@ -216,10 +212,9 @@ Colados em sequência, os blocos formam exatamente o `cd.yml` da branch `etapa-c
 # CD - Entrega Contínua
 # Quando o CI termina com sucesso na main, este workflow:
 #   1) builda a imagem com a versão (SHA do commit) no rodapé;
-#   2) publica a imagem no GitHub Container Registry (GHCR).
-#
-# Fase 2 (quando tivermos a VPS): um segundo job "deploy" vai
-# fazer SSH na VPS e rodar "docker compose pull && docker compose up -d".
+#   2) publica a imagem no GitHub Container Registry (GHCR);
+#   3) entra na VPS por SSH e atualiza o container;
+#   4) confere se a versão nova está no ar.
 # ------------------------------------------------------------------
 name: CD
 
@@ -336,11 +331,79 @@ jobs:
           echo "✅ Publicado: $IMAGEM:$SHA_CURTO" >> "$GITHUB_STEP_SUMMARY"
 ```
 
-### Bloco 7: deploy na VPS (fase 2)
+### Bloco 7: o job de deploy e o SSH
 
-**Deploy manual:** `scp` + `ssh` + `docker compose pull` + `docker compose up -d`.
+**Deploy manual:** a chave `~/.ssh/aula-deploy` que eu uso no `ssh -i`.
 
-Será escrito quando tivermos acesso à VPS.
+**O que falar:**
+- `needs: publicar`: só faz deploy se a imagem foi publicada;
+- os dados da VPS vêm dos **secrets** do repositório (Settings → Secrets and variables → Actions): ninguém vê o valor, nem nos logs;
+- a chave privada é gravada no lugar padrão (`~/.ssh/id_ed25519`), então `ssh` e `scp` funcionam sem `-i`;
+- `ssh-keyscan` é o "yes" que a gente digita na primeira conexão SSH.
+
+```yaml
+  deploy:
+    # Só roda depois que o job "publicar" terminar com sucesso.
+    needs: publicar
+    runs-on: ubuntu-24.04
+
+    # Dados da VPS, cadastrados em Settings → Secrets and variables → Actions.
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      DOMAIN: ${{ secrets.DOMAIN }}
+
+    steps:
+      # 1) Baixa o código de novo: precisamos do docker-compose.prod.yml.
+      - name: Baixar o código
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # 2) Prepara o SSH: grava a chave privada e confia na VPS (known_hosts).
+      - name: Preparar o SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+```
+
+### Bloco 8: copiar, atualizar e conferir
+
+**Deploy manual:** `scp` + `ssh` + `docker compose pull` + `docker compose up -d` + abrir o site e olhar o rodapé.
+
+**O que falar:**
+- são os mesmos comandos da etapa 4, só que sem eu digitar;
+- o último passo é o "abrir o site e olhar o rodapé" automatizado: se o SHA novo não aparecer, o CD fica ❌.
+
+```yaml
+      # 3) Copia o compose de produção para a VPS (com o nome docker-compose.yml).
+      - name: Copiar o compose para a VPS
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" "mkdir -p aula-docker"
+          scp docker-compose.prod.yml "$VPS_USER@$VPS_HOST:aula-docker/docker-compose.yml"
+
+      # 4) Na VPS: baixa a imagem nova e recria o container.
+      - name: Atualizar o container na VPS
+        run: ssh "$VPS_USER@$VPS_HOST" "cd aula-docker && docker compose pull && docker compose up -d"
+
+      # 5) Confere no site público se o rodapé já mostra o SHA deste commit.
+      - name: Conferir a versão no ar
+        run: |
+          SHA_CURTO=$(git rev-parse --short=7 HEAD)
+          for tentativa in $(seq 1 10); do
+            if curl -fsS "https://$DOMAIN/" | grep -qF "$SHA_CURTO"; then
+              echo "✅ https://$DOMAIN está na versão $SHA_CURTO" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Tentativa $tentativa: a versão nova ainda não apareceu, esperando..."
+            sleep 3
+          done
+          echo "❌ O site não mostrou a versão $SHA_CURTO"
+          exit 1
+```
 
 ## Plano B: a internet caiu
 

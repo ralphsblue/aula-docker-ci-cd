@@ -1,0 +1,96 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Definir nome e versão da imagem
+        run: |
+          {
+            echo "IMAGEM=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "SHA_CURTO=$(git rev-parse --short=7 HEAD)"
+            echo "DATA_BUILD=$(TZ=America/Sao_Paulo date '+%d/%m/%Y %H:%M')"
+          } >> "$GITHUB_ENV"
+
+      - name: Login no GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Buildar a imagem
+        run: |
+          docker build \
+            --build-arg GIT_SHA="$SHA_CURTO" \
+            --build-arg BUILD_DATE="$DATA_BUILD" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -t "$IMAGEM:latest" \
+            -t "$IMAGEM:$SHA_CURTO" \
+            .
+
+      - name: Publicar no GHCR
+        run: |
+          docker push "$IMAGEM:latest"
+          docker push "$IMAGEM:$SHA_CURTO"
+          echo "✅ Publicado: $IMAGEM:$SHA_CURTO" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: publicar
+    runs-on: ubuntu-24.04
+
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      DOMAIN: ${{ secrets.DOMAIN }}
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Preparar o SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copiar o compose para a VPS
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" "mkdir -p aula-docker"
+          scp docker-compose.prod.yml "$VPS_USER@$VPS_HOST:aula-docker/docker-compose.yml"
+
+      - name: Atualizar o container na VPS
+        run: ssh "$VPS_USER@$VPS_HOST" "cd aula-docker && docker compose pull && docker compose up -d"
+
+      - name: Conferir a versão no ar
+        run: |
+          SHA_CURTO=$(git rev-parse --short=7 HEAD)
+          for tentativa in $(seq 1 10); do
+            if curl -fsS "https://$DOMAIN/" | grep -qF "$SHA_CURTO"; then
+              echo "✅ https://$DOMAIN está na versão $SHA_CURTO" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Tentativa $tentativa: a versão nova ainda não apareceu, esperando..."
+            sleep 3
+          done
+          echo "❌ O site não mostrou a versão $SHA_CURTO"
+          exit 1

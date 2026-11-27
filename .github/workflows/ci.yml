@@ -1,37 +1,23 @@
-# ------------------------------------------------------------------
-# CI - Integração Contínua
-# Toda vez que alguém abre um pull request ou faz push na main,
-# o GitHub liga uma máquina virtual e roda os passos abaixo.
-# Se algum passo falhar, o PR fica com ❌ e a gente sabe na hora.
-# ------------------------------------------------------------------
 name: CI
 
-# QUANDO rodar
 on:
   pull_request:
   push:
     branches: [main]
 
-# O QUE rodar
 jobs:
   testar:
-    # Máquina virtual Ubuntu fornecida pelo GitHub (já vem com Docker e Node).
     runs-on: ubuntu-24.04
 
     steps:
-      # 1) Baixa o código do repositório para dentro da máquina virtual.
       - name: Baixar o código
         uses: actions/checkout@v7
 
-      # 2) Valida o HTML (tags fechadas, atributos certos...).
-      #    As regras estão no arquivo .htmlhintrc.
       - name: Validar o HTML
         run: npx --yes htmlhint@1.9.2 site/
 
-      # 3) Builda a imagem Docker, exatamente como fazemos local.
       - name: Buildar a imagem
         run: docker build -t aula-docker:teste .
 
-      # 4) Sobe um container, faz curl e confere status 200 e o texto esperado.
       - name: Teste de fumaça
         run: bash scripts/teste-fumaca.sh aula-docker:teste

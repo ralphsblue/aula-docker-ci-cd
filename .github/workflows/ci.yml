@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  testar:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+
+      - name: Validar o HTML
+        run: npx --yes htmlhint@1.9.2 site/
+
+      - name: Buildar a imagem
+        run: docker build -t aula-docker:teste .
+
+      - name: Teste de fumaça
+        run: bash scripts/teste-fumaca.sh aula-docker:teste
